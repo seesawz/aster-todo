@@ -14,7 +14,7 @@ export default defineNuxtConfig({
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
-        { name: 'description', content: 'Nuxt + Supabase 打造的待办清单应用，Claude Code 桌面端设计风格' },
+        { name: 'description', content: '简洁的待办清单应用，轻松管理每日任务' },
       ],
       link: [{
         rel: 'icon',
@@ -24,7 +24,7 @@ export default defineNuxtConfig({
     spaLoadingTemplate: 'app/spa-loading-template.html',
   },
 
-  css: ['~/assets/css/main.css'],
+  modules: ['@unocss/nuxt'],
 
   // Supabase 连接信息由环境变量注入（构建时烘焙进静态产物）
   runtimeConfig: {

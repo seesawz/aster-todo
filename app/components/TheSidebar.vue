@@ -1,54 +1,47 @@
 <script setup lang="ts">
-const { counts, progress, view, setView, tasks, mode, syncError } = useTasks()
+import { AnimatePresence, motion } from 'motion-v'
+import type { ProjectIconName } from '~/utils/projectIcons'
+const { projects, projectId, counts, setProject, addProject, renameProject } = useTasks()
 const { toggleTheme } = useTheme()
-
 const emit = defineEmits<{ (e: 'new-task'): void }>()
 
-// 视图图标（静态字符串，v-html 安全）
-const NAV_ICONS: Record<string, string> = {
-  calendar: '<rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8.5 15.5l2.4 2.4 4.6-4.8"/>',
-  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
-  layers: '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13.5l9 5 9-5"/>',
-  'check-circle': '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.4 2.4 4.6-5"/>',
+const editorVisible = ref(false)
+const openIcons = ref(false)
+const editingProjectId = ref<string | null>(null)
+const projectAddButton = ref<HTMLButtonElement | null>(null)
+const sidebarEl = ref<HTMLElement | null>(null)
+
+function openProjectEditor(id: string | null = null, chooseIcon = false) {
+  openIcons.value = chooseIcon
+  editingProjectId.value = id
+  editorVisible.value = true
 }
 
-const NAV_ITEMS: { key: 'today' | 'starred' | 'all' | 'done', label: string, icon: string }[] = [
-  { key: 'today', label: '今天', icon: 'calendar' },
-  { key: 'starred', label: '重要', icon: 'star' },
-  { key: 'all', label: '全部', icon: 'layers' },
-  { key: 'done', label: '已完成', icon: 'check-circle' },
-]
+async function closeProjectEditor(saved = false) {
+  const id = editingProjectId.value
+  editorVisible.value = false
+  await nextTick()
+  if (saved) sidebarEl.value?.querySelector<HTMLButtonElement>(`[data-project-id="${id || projectId.value}"] .nav-item`)?.focus()
+  else if (id) sidebarEl.value?.querySelector<HTMLButtonElement>(`[data-project-id="${id}"] .project-rename`)?.focus()
+  else projectAddButton.value?.focus()
+}
 
-const MODE_LABEL = {
-  local: '本地模式',
-  cloud: 'Supabase 已连接',
-  error: '同步失败 · 本地缓存',
-} as const
+function saveProject(name: string, icon: ProjectIconName) {
+  const saved = editingProjectId.value
+    ? renameProject(editingProjectId.value, name, icon)
+    : addProject(name, icon)
+  if (saved) closeProjectEditor(true)
+}
 
-const MODE_NOTE = {
-  local: '数据仅保存在本地浏览器',
-  cloud: '数据已云同步至 Supabase',
-  error: '云端暂不可达，改动已存本地',
-} as const
-
-// 数据导出（JSON 备份）
-function exportData() {
-  const blob = new Blob(
-    [JSON.stringify({ exportedAt: new Date().toISOString(), todos: tasks.value }, null, 2)],
-    { type: 'application/json' },
-  )
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `claude-todo-${todayStr()}.json`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+function selectProject(id: string) {
+  editorVisible.value = false
+  setProject(id)
 }
 </script>
 
 <template>
-  <aside class="sidebar">
-    <div class="brand">
+  <aside ref="sidebarEl" class="sidebar">
+    <motion.div class="brand" :initial="{ opacity: 0, x: -6 }" :animate="{ opacity: 1, x: 0 }">
       <span class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <path d="M12 2.5v5.5M12 16v5.5M2.5 12H8M16 12h5.5M5.3 5.3l3.9 3.9M14.8 14.8l3.9 3.9M18.7 5.3l-3.9 3.9M9.2 14.8l-3.9 3.9" />
@@ -63,46 +56,61 @@ function exportData() {
           <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" />
         </svg>
       </button>
-    </div>
+    </motion.div>
 
-    <button class="new-task-btn" title="快捷键 N" @click="emit('new-task')">
+    <motion.button :while-press="{ scale: 0.98 }" class="new-task-btn" title="快捷键 N" @click="emit('new-task')">
       <span class="plus" aria-hidden="true">＋</span> 新任务
-    </button>
+    </motion.button>
 
-    <nav class="nav" aria-label="视图切换">
-      <button
-        v-for="item in NAV_ITEMS"
-        :key="item.key"
-        class="nav-item"
-        :class="{ active: view === item.key }"
-        @click="setView(item.key)"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" v-html="NAV_ICONS[item.icon]" />
-        {{ item.label }}
-        <span class="badge">{{ counts[item.key] }}</span>
+    <div class="projects-heading">
+      <span>项目</span>
+      <button type="button" ref="projectAddButton" class="project-add" aria-label="新建项目" @click="openProjectEditor()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        新建
       </button>
-    </nav>
-
-    <div class="sidebar-footer">
-      <div class="progress">
-        <div class="progress-label">
-          <span>今日进度</span>
-          <span class="mono">{{ progress.done }} / {{ progress.total }}</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill" :style="{ width: progress.pct + '%' }" /></div>
-      </div>
-
-      <div class="conn-badge" :class="mode" :title="syncError || ''">
-        <span class="led" />{{ MODE_LABEL[mode] }}
-      </div>
-
-      <button class="export-btn" title="导出全部数据为 JSON 备份" @click="exportData">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4.5 19.5h15" />
-        </svg>
-        导出数据
-      </button>
-      <p class="sidebar-note">{{ MODE_NOTE[mode] }}</p>
     </div>
+    <nav class="nav" aria-label="项目切换">
+      <AnimatePresence :initial="false">
+        <ProjectNameEditor
+          v-if="editorVisible && !editingProjectId"
+          key="new-project"
+          mode="create"
+          @save="saveProject"
+          @cancel="closeProjectEditor()"
+        />
+        <motion.div layout="position" :initial="{ opacity: 0, x: -4 }" :animate="{ opacity: 1, x: 0 }" v-for="project in projects" :key="project.id" :data-project-id="project.id" class="project-row group/project" :class="{ 'text-ink font-medium': projectId === project.id, 'hover:bg-hover': projectId !== project.id, 'pr-0 mobile:w-full': editorVisible && editingProjectId === project.id }">
+          <motion.span v-if="projectId === project.id" layout-id="selected-project" class="project-selection" :initial="false" aria-hidden="true" />
+          <ProjectNameEditor
+            v-if="editorVisible && editingProjectId === project.id"
+            :key="project.id"
+            mode="rename"
+            :name="project.name"
+            :icon="project.icon"
+            :open-icons="openIcons"
+            @save="saveProject"
+            @cancel="closeProjectEditor()"
+          />
+          <template v-else>
+            <button type="button" class="project-icon-button" :class="{ 'text-accent': projectId === project.id }" :aria-label="`更换${project.name}的图标`" title="更换项目图标" @click="openProjectEditor(project.id, true)">
+              <ProjectIcon :name="project.icon" />
+            </button>
+            <button
+              class="nav-item"
+              :class="{ 'text-ink font-medium': projectId === project.id }"
+              :aria-current="projectId === project.id ? 'page' : undefined"
+              @click="selectProject(project.id)"
+            >
+              <span class="project-name" :title="`${project.name} · 双击重命名`" @dblclick.stop="openProjectEditor(project.id)">{{ project.name }}</span>
+              <span class="badge" title="未完成任务">{{ counts[project.id] }}</span>
+            </button>
+            <button type="button" class="project-rename" :aria-label="`重命名${project.name}`" title="重命名项目" @click="openProjectEditor(project.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 5Z" />
+              </svg>
+            </button>
+          </template>
+        </motion.div>
+      </AnimatePresence>
+    </nav>
   </aside>
 </template>

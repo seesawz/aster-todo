@@ -4,6 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.4.0",
   "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
@@ -12,8 +13,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
+    "motion-v": "^2.6.0",
     "nuxt": "^4.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@unocss/nuxt": "^66.10.5",
+    "unocss": "^66.10.5"
   }
 }

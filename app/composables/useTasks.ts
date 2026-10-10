@@ -5,16 +5,20 @@
 // ============================================================
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Priority, Task } from '~/utils/parse'
+import { isProjectIcon, type ProjectIconName } from '../utils/projectIcons.ts'
 
-export type ViewName = 'today' | 'starred' | 'all' | 'done'
+export interface Project { id: string, name: string, icon: ProjectIconName }
 export type ConnMode = 'local' | 'cloud' | 'error'
 
 const STORAGE_KEY = 'claude-todo.tasks'
 const OWNER_KEY = 'claude-todo.owner'
+const PROJECTS_KEY = 'claude-todo.projects'
+const INBOX: Project = { id: 'inbox', name: '收件箱', icon: 'folder' }
 
 // ---------- 模块级单例状态（所有组件共享） ----------
 const tasks = ref<Task[]>([])
-const view = ref<ViewName>('today')
+const projects = ref<Project[]>([{ ...INBOX }])
+const projectId = ref(INBOX.id)
 const search = ref('')
 const mode = ref<ConnMode>('local')   // 当前数据模式
 const syncError = ref<string | null>(null)
@@ -46,6 +50,7 @@ function ensureOwnerId(): string {
 interface DbTask {
   id: string
   owner: string
+  project_id: string
   text: string
   done: boolean
   priority: number
@@ -59,6 +64,7 @@ interface DbTask {
 function fromDb(row: DbTask): Task {
   return {
     id: row.id,
+    projectId: row.project_id || INBOX.id,
     text: row.text ?? '',
     done: !!row.done,
     priority: ([1, 2, 3].includes(row.priority) ? row.priority : 0) as Priority,
@@ -74,6 +80,7 @@ function toDb(t: Task): DbTask {
   return {
     id: t.id,
     owner: ownerId,
+    project_id: t.projectId,
     text: t.text,
     done: t.done,
     priority: t.priority,
@@ -91,16 +98,23 @@ function loadLocal() {
     const raw = localStorage.getItem(STORAGE_KEY)
     const data = raw ? JSON.parse(raw) : []
     if (Array.isArray(data)) tasks.value = data.map(normalize)
+    const savedProjects = localStorage.getItem(PROJECTS_KEY)
+    if (savedProjects) projects.value = JSON.parse(savedProjects).map(normalizeProject)
+    ensureInbox()
   } catch { /* ignore */ }
 }
 
 function saveLocal() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks.value)) } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks.value))
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects.value))
+  } catch { /* ignore */ }
 }
 
 function normalize(t: Partial<Task>): Task {
   return {
     id: t.id || crypto.randomUUID(),
+    projectId: t.projectId || INBOX.id,
     text: String(t.text || ''),
     done: !!t.done,
     priority: ([1, 2, 3].includes(t.priority as number) ? t.priority : 0) as Priority,
@@ -125,10 +139,16 @@ async function initTasks() {
     global: { headers: { 'x-owner-id': ownerId } },
   })
   try {
-    const { data, error } = await client.from('tasks').select('*').order('created_at', { ascending: false })
-    if (error) throw error
+    const [taskResult, projectResult] = await Promise.all([
+      client.from('tasks').select('*').order('created_at', { ascending: false }),
+      client.from('projects').select('id, name, icon').order('created_at'),
+    ])
+    if (taskResult.error) throw taskResult.error
+    if (projectResult.error) throw projectResult.error
     // 云端数据覆盖本地缓存（云端为主）
-    tasks.value = (data as DbTask[]).map(fromDb)
+    tasks.value = (taskResult.data as DbTask[]).map(fromDb)
+    projects.value = (projectResult.data as Project[]).map(normalizeProject)
+    ensureInbox()
     mode.value = 'cloud'
     syncError.value = null
     saveLocal()
@@ -155,64 +175,68 @@ async function cloudWrite(fn: (c: SupabaseClient) => Promise<unknown>) {
   }
 }
 
-// ---------- 视图过滤与排序 ----------
-const PRI_WEIGHT: Record<number, number> = { 1: 0, 2: 1, 3: 2, 0: 3 }
+// ---------- 项目与任务列表 ----------
+function normalizeProject(project: Project): Project {
+  return { ...project, icon: isProjectIcon(project.icon) ? project.icon : 'folder' }
+}
 
-const isActive = (t: Task) => !t.done
-const isActiveToday = (t: Task) => !t.done && !!t.due && diffDays(t.due) <= 0
+function ensureInbox() {
+  if (!projects.value.some(p => p.id === INBOX.id)) projects.value.unshift({ ...INBOX })
+}
 
+const currentProject = computed(() => projects.value.find(p => p.id === projectId.value)!)
+const projectTasks = computed(() => tasks.value.filter(t => t.projectId === projectId.value))
 const filtered = computed<Task[]>(() => {
-  if (search.value) {
-    const q = search.value.toLowerCase()
-    return tasks.value.filter(
-      t => t.text.toLowerCase().includes(q) || t.tags.some(tag => tag.toLowerCase().includes(q)),
-    )
-  }
-  switch (view.value) {
-    case 'today':
-      return tasks.value
-        .filter(isActiveToday)
-        .sort((a, b) =>
-          diffDays(a.due!) - diffDays(b.due!)
-          || PRI_WEIGHT[a.priority] - PRI_WEIGHT[b.priority]
-          || a.createdAt - b.createdAt)
-    case 'starred':
-      return tasks.value.filter(t => isActive(t) && t.starred)
-    case 'all':
-      return tasks.value.filter(isActive)
-    case 'done':
-      return tasks.value
-        .filter(t => t.done)
-        .sort((a, b) => (b.completedAt || b.createdAt) - (a.completedAt || a.createdAt))
-  }
-  return []
+  const q = search.value.trim().toLowerCase()
+  return projectTasks.value.filter(t => !q || t.text.toLowerCase().includes(q)
+    || t.tags.some(tag => tag.toLowerCase().includes(q)))
 })
+const counts = computed(() => Object.fromEntries(projects.value.map(p => [
+  p.id, tasks.value.filter(t => t.projectId === p.id && !t.done).length,
+])))
+const completedCount = computed(() => projectTasks.value.filter(t => t.done).length)
+const viewTitle = computed(() => currentProject.value.name)
 
-const counts = computed(() => ({
-  today: tasks.value.filter(isActiveToday).length,
-  starred: tasks.value.filter(t => isActive(t) && t.starred).length,
-  all: tasks.value.filter(isActive).length,
-  done: tasks.value.filter(t => t.done).length,
-}))
-
-const progress = computed(() => {
-  const done = tasks.value.filter(t => t.done).length
-  return { done, total: tasks.value.length, pct: tasks.value.length ? Math.round((done / tasks.value.length) * 100) : 0 }
-})
-
-const VIEW_TITLES: Record<ViewName, string> = { today: '今天', starred: '重要', all: '全部任务', done: '已完成' }
-const viewTitle = computed(() => (search.value ? `搜索“${search.value}”` : VIEW_TITLES[view.value]))
-
-function setView(v: ViewName) {
-  view.value = v
+function setProject(id: string) {
+  projectId.value = id
   search.value = ''
+}
+
+function addProject(name: string, icon: ProjectIconName = 'folder'): boolean {
+  const trimmed = name.trim()
+  if (!trimmed) return false
+  const project = { id: crypto.randomUUID(), name: trimmed, icon }
+  projects.value.push(project)
+  setProject(project.id)
+  saveLocal()
+  cloudWrite(c => c.from('projects').insert({ ...project, owner: ownerId }))
+  return true
+}
+
+function renameProject(id: string, name: string, icon?: ProjectIconName): boolean {
+  const project = projects.value.find(p => p.id === id)
+  const trimmed = name.trim()
+  if (!project || !trimmed) return false
+  project.name = trimmed
+  if (icon) project.icon = icon
+  saveLocal()
+  cloudWrite(c => c.from('projects').upsert({ ...project, owner: ownerId }))
+  return true
+}
+
+function moveTask(id: string, targetProjectId: string) {
+  const task = tasks.value.find(t => t.id === id)
+  if (!task || !projects.value.some(p => p.id === targetProjectId)) return
+  task.projectId = targetProjectId
+  saveLocal()
+  cloudWrite(c => c.from('tasks').update({ project_id: targetProjectId }).eq('id', id))
 }
 
 // ---------- 操作 ----------
 function addTask(raw: string): boolean {
   const p = parseInput(raw)
   if (!p.text && p.tags.length === 0) return false
-  const t = normalize({ ...p, createdAt: Date.now() })
+  const t = normalize({ ...p, projectId: projectId.value, createdAt: Date.now() })
   tasks.value.unshift(t)
   saveLocal()
   cloudWrite(c => c.from('tasks').insert(toDb(t)))
@@ -274,9 +298,9 @@ function hideToast() {
 }
 
 function clearDone() {
-  const removedIds = tasks.value.filter(t => t.done).map(t => t.id)
+  const removedIds = projectTasks.value.filter(t => t.done).map(t => t.id)
   if (!removedIds.length) return
-  tasks.value = tasks.value.filter(t => !t.done)
+  tasks.value = tasks.value.filter(t => !removedIds.includes(t.id))
   saveLocal()
   cloudWrite(c => c.from('tasks').delete().in('id', removedIds))
 }
@@ -298,10 +322,10 @@ function reorder(dragId: string, targetId: string, before: boolean) {
 export function useTasks() {
   return {
     // 状态
-    tasks, view, search, mode, syncError, filtered, counts, progress, viewTitle,
+    tasks, projects, projectId, currentProject, search, filtered, counts, completedCount, viewTitle,
     toastVisible, toastText,
     // 动作
-    initTasks, setView, addTask, toggleDone, toggleStar, saveEdit,
+    initTasks, setProject, addProject, renameProject, moveTask, addTask, toggleDone, toggleStar, saveEdit,
     removeTask, undoRemove, hideToast, clearDone, reorder,
   }
 }
