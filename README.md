@@ -1,4 +1,4 @@
-# Claude Todo ✳
+# Aster ✳
 
 以 [Claude Code 桌面端](https://claude.com/claude-code)设计风格打造的待办清单应用。
 

@@ -47,7 +47,7 @@ function selectProject(id: string) {
           <path d="M12 2.5v5.5M12 16v5.5M2.5 12H8M16 12h5.5M5.3 5.3l3.9 3.9M14.8 14.8l3.9 3.9M18.7 5.3l-3.9 3.9M9.2 14.8l-3.9 3.9" />
         </svg>
       </span>
-      <span class="brand-name">Claude Todo</span>
+      <span class="brand-name">Aster</span>
       <button class="icon-btn" title="切换深浅色主题" aria-label="切换深浅色主题" @click="toggleTheme">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19" />

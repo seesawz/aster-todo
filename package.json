@@ -1,5 +1,5 @@
 {
-  "name": "claude-todolist",
+  "name": "aster-todo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.4.0",

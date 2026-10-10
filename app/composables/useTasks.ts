@@ -10,9 +10,10 @@ import { isProjectIcon, type ProjectIconName } from '../utils/projectIcons.ts'
 export interface Project { id: string, name: string, icon: ProjectIconName }
 export type ConnMode = 'local' | 'cloud' | 'error'
 
-const STORAGE_KEY = 'claude-todo.tasks'
-const OWNER_KEY = 'claude-todo.owner'
-const PROJECTS_KEY = 'claude-todo.projects'
+const STORAGE_KEY = 'aster.tasks'
+const OWNER_KEY = 'aster.owner'
+const PROJECTS_KEY = 'aster.projects'
+const LEGACY_PREFIX = 'claude-todo.' // 旧版存储 key，读取时兼容迁移
 const INBOX: Project = { id: 'inbox', name: '收件箱', icon: 'folder' }
 
 // ---------- 模块级单例状态（所有组件共享） ----------
@@ -38,7 +39,7 @@ function cloudConfigured(): boolean {
 /** 无登录方案：每个浏览器生成随机 owner，配合 RLS 只能看到自己的数据 */
 function ensureOwnerId(): string {
   let id = ''
-  try { id = localStorage.getItem(OWNER_KEY) || '' } catch { /* ignore */ }
+  try { id = localStorage.getItem(OWNER_KEY) || localStorage.getItem(LEGACY_PREFIX + 'owner') || '' } catch { /* ignore */ }
   if (!id) {
     id = crypto.randomUUID()
     try { localStorage.setItem(OWNER_KEY, id) } catch { /* ignore */ }
@@ -95,10 +96,10 @@ function toDb(t: Task): DbTask {
 // ---------- 本地持久化 ----------
 function loadLocal() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_PREFIX + 'tasks')
     const data = raw ? JSON.parse(raw) : []
     if (Array.isArray(data)) tasks.value = data.map(normalize)
-    const savedProjects = localStorage.getItem(PROJECTS_KEY)
+    const savedProjects = localStorage.getItem(PROJECTS_KEY) ?? localStorage.getItem(LEGACY_PREFIX + 'projects')
     if (savedProjects) projects.value = JSON.parse(savedProjects).map(normalizeProject)
     ensureInbox()
   } catch { /* ignore */ }
@@ -156,7 +157,7 @@ async function initTasks() {
     // 云端失败 → 本地缓存兜底
     mode.value = 'error'
     syncError.value = e instanceof Error ? e.message : String(e)
-    console.warn('[claude-todo] Supabase 连接失败，使用本地模式：', syncError.value)
+    console.warn('[aster] Supabase 连接失败，使用本地模式：', syncError.value)
   }
 }
 
@@ -171,7 +172,7 @@ async function cloudWrite(fn: (c: SupabaseClient) => Promise<unknown>) {
   } catch (e) {
     mode.value = 'error'
     syncError.value = e instanceof Error ? e.message : String(e)
-    console.warn('[claude-todo] 同步失败，已保留在本地：', syncError.value)
+    console.warn('[aster] 同步失败，已保留在本地：', syncError.value)
   }
 }
 

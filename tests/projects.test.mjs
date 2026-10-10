@@ -23,7 +23,7 @@ beforeEach(() => {
 })
 
 test('旧任务归入收件箱，保留完成状态和记录日期', async () => {
-  storage.set('claude-todo.tasks', JSON.stringify([
+  storage.set('aster.tasks', JSON.stringify([
     { id: 'old', text: '旧任务', due: '2020-01-01', done: true },
   ]))
   await state.initTasks()
@@ -97,7 +97,7 @@ test('项目图标可选择、修改并在刷新后保留', async () => {
 })
 
 test('旧项目没有图标时使用文件夹，不改变任务归属', async () => {
-  storage.set('claude-todo.projects', JSON.stringify([{ id: 'inbox', name: '收件箱' }]))
+  storage.set('aster.projects', JSON.stringify([{ id: 'inbox', name: '收件箱' }]))
   await state.initTasks()
   assert.equal(state.currentProject.value.icon, 'folder')
   state.addTask('已有项目的任务')

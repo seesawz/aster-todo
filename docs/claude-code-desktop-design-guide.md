@@ -1,6 +1,6 @@
-# Claude Code Desktop 风格 · Claude Todo 项目设计指南
+# Claude Code Desktop 风格 · Aster 项目设计指南
 
-本指南用于 Claude Todo 的项目导航、新建与重命名流程。它是本项目的设计约定，不是 Anthropic 官方桌面端组件规范。
+本指南用于 Aster 的项目导航、新建与重命名流程。它是本项目的设计约定，不是 Anthropic 官方桌面端组件规范。
 
 ## 参考与适配
 

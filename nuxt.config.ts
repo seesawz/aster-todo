@@ -7,9 +7,9 @@ export default defineNuxtConfig({
 
   app: {
     // GitHub 项目页托管在仓库子路径下
-    baseURL: '/claude-todolist/',
+    baseURL: '/aster-todo/',
     head: {
-      title: 'Claude Todo — 待办清单',
+      title: 'Aster — 待办清单',
       htmlAttrs: { lang: 'zh-CN' },
       meta: [
         { charset: 'utf-8' },
