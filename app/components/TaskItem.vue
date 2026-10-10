@@ -10,7 +10,7 @@ const props = defineProps<{
   dropMark: boolean | null
 }>()
 
-const { projects, moveTask, toggleDone, toggleStar, saveEdit, removeTask } = useTasks()
+const { projects, moveTask, toggleDone, toggleStar, saveEdit, removeTask, setDue } = useTasks()
 
 // ---- 双击行内编辑 ----
 const editing = ref(false)
@@ -36,6 +36,10 @@ function finishEdit(save: boolean) {
 
 function onProjectChange(e: Event) {
   moveTask(props.task.id, (e.target as HTMLSelectElement).value)
+}
+
+function onDueChange(e: Event) {
+  setDue(props.task.id, (e.target as HTMLInputElement).value || null)
 }
 
 const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.completedAt || props.task.createdAt : props.task.createdAt))
@@ -94,7 +98,7 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
       </div>
       <div v-if="task.tags.length || task.due" class="task-meta">
         <span v-for="tag in task.tags" :key="tag" class="tag-chip">#{{ tag }}</span>
-        <span v-if="task.due" class="due-chip" title="记录日期">{{ task.due }}</span>
+        <span v-if="task.due" class="due-chip" title="到期时间">{{ task.due }}</span>
       </div>
     </div>
 
@@ -136,6 +140,19 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
         <div class="task-details-content">
           <div class="task-record"><span>创建时间</span><time>{{ fmtStamp(task.createdAt) }}</time></div>
           <div v-if="task.done" class="task-record mt-6px"><span>完成时间</span><time>{{ recordStamp }}</time></div>
+          <div class="task-record mt-6px">
+            <span>到期时间</span>
+            <span class="flex items-center gap-6px">
+              <input
+                type="date"
+                class="task-due-input"
+                :value="task.due ?? ''"
+                aria-label="设置到期时间"
+                @change="onDueChange"
+              >
+              <button v-if="task.due" type="button" class="task-due-clear" aria-label="清除到期时间" title="清除到期时间" @click="setDue(task.id, null)">清除</button>
+            </span>
+          </div>
           <div class="task-detail-actions">
             <label v-if="projects.length > 1" class="task-project-label">
               移至

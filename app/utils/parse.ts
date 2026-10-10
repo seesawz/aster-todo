@@ -10,7 +10,7 @@ export interface Task {
   text: string
   done: boolean
   priority: Priority
-  due: string | null          // 记录日期，YYYY-MM-DD
+  due: string | null          // 到期时间，YYYY-MM-DD
   starred: boolean
   tags: string[]
   createdAt: number
@@ -71,7 +71,7 @@ export function parseInput(raw: string): ParsedInput {
     }
   }
 
-  // 记录日期：10月12日 / 10/12 / 10-12（当年）
+  // 到期时间：10月12日 / 10/12 / 10-12（当年）
   if (!res.due) {
     const abs = text.match(/\s(\d{1,2})[月\/\-](\d{1,2})日?(?=\s)/)
     if (abs) {

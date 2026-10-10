@@ -83,6 +83,20 @@ test('记录过去日期时保留当年，不按截止日期顺延到明年', ()
   assert.equal(parsed.text, '记录')
 })
 
+test('到期时间可设置、修改、清除并在刷新后保留', async () => {
+  state.addTask('带日期任务')
+  const id = state.tasks.value[0].id
+  state.setDue(id, '2030-06-01')
+  assert.equal(state.tasks.value[0].due, '2030-06-01')
+  state.setDue(id, '2030-07-15')
+  assert.equal(state.tasks.value[0].due, '2030-07-15')
+  state.setDue(id, null)
+  assert.equal(state.tasks.value[0].due, null)
+  state.setDue(id, '2030-07-15')
+  state.tasks.value = []
+  await state.initTasks()
+  assert.equal(state.filtered.value[0].due, '2030-07-15')
+})
 
 test('项目图标可选择、修改并在刷新后保留', async () => {
   state.addProject('工作', 'briefcase')

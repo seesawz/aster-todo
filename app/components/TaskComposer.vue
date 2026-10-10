@@ -12,7 +12,7 @@ const hintParts = computed(() => {
   if (!raw) return []
   const p = parseInput(raw)
   const parts: string[] = []
-  if (p.due) parts.push(`📅 记录日期 ${p.due}`)
+  if (p.due) parts.push(`📅 到期 ${p.due}`)
   if (p.priority) parts.push(`${'!'.repeat(4 - p.priority)} ${['', 'P1 高', 'P2 中', 'P3 低'][p.priority]}优先级`)
   for (const tag of p.tags) parts.push(`#${tag}`)
   return parts

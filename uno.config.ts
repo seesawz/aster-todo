@@ -161,6 +161,8 @@ export default defineConfig({
     'task-detail-actions': 'flex items-center flex-wrap gap-8px mt-12px',
     'task-project-label': 'flex items-center gap-8px text-muted text-12px',
     'task-project': 'max-w-180px py-3px px-6px border border-solid border-edge rounded-5px bg-surface text-ink cursor-pointer',
+    'task-due-input': 'py-3px px-6px border border-solid border-edge rounded-5px bg-surface text-ink text-12px tabular-nums cursor-pointer ui-focus-ring',
+    'task-due-clear': 'ui-control text-subtle text-12px py-2px px-4px rounded-6px transition-colors duration-150 hover:text-danger ui-focus-ring',
     'task-delete': 'grid place-items-center w-28px h-28px ml-auto p-0 ui-control rounded-6px text-danger hover:bg-hover ui-focus-ring [&_svg]:block [&_svg]:w-16px [&_svg]:h-16px',
     'task-side': 'flex items-center gap-2px shrink-0',
     'task-action': 'grid place-items-center w-28px h-28px p-0 ui-control rounded-8px text-subtle opacity-0 [transition-property:opacity,background,color] duration-150 group-hover/task:opacity-100 group-focus-within/task:opacity-100 focus-visible:opacity-100 hover:bg-hover ui-focus-ring mobile:opacity-100 touch:opacity-100 [&_svg]:w-15px [&_svg]:h-15px',

@@ -261,6 +261,14 @@ function toggleStar(id: string) {
   cloudWrite(c => c.from('tasks').update({ starred: t.starred }).eq('id', id))
 }
 
+function setDue(id: string, due: string | null) {
+  const t = tasks.value.find(t => t.id === id)
+  if (!t || t.due === due) return
+  t.due = due
+  saveLocal()
+  cloudWrite(c => c.from('tasks').update({ due }).eq('id', id))
+}
+
 function saveEdit(id: string, text: string) {
   const t = tasks.value.find(t => t.id === id)
   if (!t) return
@@ -327,6 +335,6 @@ export function useTasks() {
     toastVisible, toastText,
     // 动作
     initTasks, setProject, addProject, renameProject, moveTask, addTask, toggleDone, toggleStar, saveEdit,
-    removeTask, undoRemove, hideToast, clearDone, reorder,
+    removeTask, undoRemove, hideToast, clearDone, reorder, setDue,
   }
 }
