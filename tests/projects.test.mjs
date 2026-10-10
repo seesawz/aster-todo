@@ -1,7 +1,7 @@
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ref, computed } from 'vue'
-import { parseInput } from '../app/utils/parse.ts'
+import { parseInput, fmtDue, addDaysStr, nextMondayStr, toDateStr } from '../app/utils/parse.ts'
 
 const storage = new Map()
 Object.assign(globalThis, {
@@ -81,6 +81,20 @@ test('记录过去日期时保留当年，不按截止日期顺延到明年', ()
   const parsed = parseInput('记录 1/1')
   assert.equal(parsed.due, `${new Date().getFullYear()}-01-01`)
   assert.equal(parsed.text, '记录')
+})
+
+test('到期时间显示：今天/明天/后天，周几与跨年', () => {
+  assert.equal(fmtDue(toDateStr(new Date())), '今天')
+  assert.equal(fmtDue(addDaysStr(1)), '明天')
+  assert.equal(fmtDue(addDaysStr(2)), '后天')
+  assert.equal(fmtDue('2000-01-01'), '2000年1月1日 周六')
+})
+
+test('下周一快捷项返回未来的周一', () => {
+  const nm = nextMondayStr()
+  const [y, m, d] = nm.split('-').map(Number)
+  assert.equal(new Date(y, m - 1, d).getDay(), 1)
+  assert.ok(nm > toDateStr(new Date()))
 })
 
 test('到期时间可设置、修改、清除并在刷新后保留', async () => {

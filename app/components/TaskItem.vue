@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { AnimatePresence, motion } from 'motion-v'
+import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
+import { fmtDue, fmtStamp } from '~/utils/parse'
 import type { Task } from '~/utils/parse'
 
 const props = defineProps<{
@@ -38,8 +40,16 @@ function onProjectChange(e: Event) {
   moveTask(props.task.id, (e.target as HTMLSelectElement).value)
 }
 
-function onDueChange(e: Event) {
-  setDue(props.task.id, (e.target as HTMLInputElement).value || null)
+// 日期选择锚定在到期按钮，浮层由 Reka UI 管理定位和关闭。
+const duePopoverOpen = ref(false)
+
+function closeDuePopover() {
+  duePopoverOpen.value = false
+}
+
+function pickDue(due: string | null) {
+  setDue(props.task.id, due)
+  closeDuePopover()
 }
 
 const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.completedAt || props.task.createdAt : props.task.createdAt))
@@ -98,7 +108,7 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
       </div>
       <div v-if="task.tags.length || task.due" class="task-meta">
         <span v-for="tag in task.tags" :key="tag" class="tag-chip">#{{ tag }}</span>
-        <span v-if="task.due" class="due-chip" title="到期时间">{{ task.due }}</span>
+        <span v-if="task.due" class="due-chip" title="到期时间">{{ fmtDue(task.due) }}</span>
       </div>
     </div>
 
@@ -142,16 +152,30 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
           <div v-if="task.done" class="task-record mt-6px"><span>完成时间</span><time>{{ recordStamp }}</time></div>
           <div class="task-record mt-6px">
             <span>到期时间</span>
-            <span class="flex items-center gap-6px">
-              <input
-                type="date"
-                class="task-due-input"
-                :value="task.due ?? ''"
-                aria-label="设置到期时间"
-                @change="onDueChange"
-              >
-              <button v-if="task.due" type="button" class="task-due-clear" aria-label="清除到期时间" title="清除到期时间" @click="setDue(task.id, null)">清除</button>
-            </span>
+            <PopoverRoot v-model:open="duePopoverOpen">
+              <PopoverTrigger as-child>
+                <button type="button" class="due-toggle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="15" rx="2.5" /><path d="M4 10.5h16M8.5 3.5v4M15.5 3.5v4" /></svg>
+                  <span :class="{ 'text-subtle': !task.due }">{{ task.due ? fmtDue(task.due) : '设置到期…' }}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverPortal>
+                <PopoverContent
+                  class="date-popover"
+                  side="bottom"
+                  align="end"
+                  :side-offset="8"
+                  :collision-padding="12"
+                  aria-label="选择到期日期"
+                  @open-auto-focus.prevent
+                  @keydown.stop
+                >
+                  <motion.div :initial="{ opacity: 0, scale: 0.98 }" :animate="{ opacity: 1, scale: 1 }">
+                    <TaskDatePicker :value="task.due" @select="pickDue" @cancel="closeDuePopover" />
+                  </motion.div>
+                </PopoverContent>
+              </PopoverPortal>
+            </PopoverRoot>
           </div>
           <div class="task-detail-actions">
             <label v-if="projects.length > 1" class="task-project-label">

@@ -34,6 +34,30 @@ export function fmtStamp(ts: number): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+const WEEKDAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
+
+/** 到期时间显示：今天 / 明天 / 后天 / M月D日 周X（跨年附年份） */
+export function fmtDue(due: string): string {
+  const [y, m, d] = due.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff = Math.round((date.getTime() - today.getTime()) / 86400000)
+  if (diff === 0) return '今天'
+  if (diff === 1) return '明天'
+  if (diff === 2) return '后天'
+  const md = `${m}月${d}日 周${WEEKDAY_NAMES[date.getDay()]}`
+  return y === now.getFullYear() ? md : `${y}年${md}`
+}
+
+/** 下一个周一（周一当天取 7 天后） */
+export function nextMondayStr(): string {
+  const d = new Date()
+  const offset = (8 - d.getDay()) % 7 || 7
+  d.setDate(d.getDate() + offset)
+  return toDateStr(d)
+}
+
 export interface ParsedInput {
   text: string
   priority: Priority
