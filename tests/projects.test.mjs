@@ -1,3 +1,6 @@
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+import { loadGuestWorkspace } from '../app/utils/guestStorage.ts'
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ref, computed } from 'vue'
@@ -15,7 +18,9 @@ Object.assign(globalThis, {
 const { useTasks } = await import('../app/composables/useTasks.ts')
 const state = useTasks()
 
-beforeEach(() => {
+beforeEach(async () => {
+  await loadGuestWorkspace()
+  globalThis.indexedDB = new IDBFactory()
   storage.clear()
   state.tasks.value = []
   state.projects.value = [{ id: 'inbox', name: '收件箱', icon: 'folder' }]

@@ -4,14 +4,26 @@ import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion-
 const reducedMotion = useReducedMotion()
 const {
   filtered, projectId, viewTitle, search, completedCount,
-  toastVisible, toastText, undoRemove, clearDone, initTasks,
+  toastVisible, toastText, undoRemove, clearDone, initTasks, resetTasks, loading, mode, writable, localOnly,
 } = useTasks()
 const { initTheme } = useTheme()
+const { user, ready, configured, isGuestMode, getClient, initAuth } = useAuth()
+
+function loadAccount() {
+  if (user.value) { void initTasks(getClient(), user.value.id); return }
+  if (isGuestMode.value) { void initTasks(null, '', true); return }
+  resetTasks()
+}
+const workspace = computed(() => !ready.value ? 'initial' : user.value ? `user:${user.value.id}` : isGuestMode.value ? 'guest' : 'signed-out')
+watch(workspace, () => {
+  closeSearch()
+  if (ready.value) loadAccount()
+}, { flush: 'sync' })
 
 // 初始化：主题 + 数据加载（本地缓存先行，Supabase 异步接管）
 onMounted(() => {
   initTheme()
-  initTasks()
+  void initAuth()
 })
 
 // 快捷键：N 聚焦新任务输入框，Ctrl+F 呼出搜索，Esc 关闭搜索
@@ -25,6 +37,7 @@ function closeSearch() {
 }
 
 async function onKeydown(e: KeyboardEvent) {
+  if (!ready.value || (configured && !user.value && !isGuestMode.value)) return
   if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') {
     e.preventDefault()
     searchVisible.value = true
@@ -58,7 +71,9 @@ const emptyCopy = computed(() => search.value
 
 <template>
   <MotionConfig reduced-motion="user" :skip-animations="reducedMotion" :transition="{ duration: 0.2, ease: 'easeOut' }">
-    <div class="app">
+    <div v-if="!ready" class="startup-screen" role="status" aria-label="正在恢复登录状态"><span class="startup-logo" aria-hidden="true">✳</span></div>
+    <AuthPanel v-else-if="configured && !user && !isGuestMode" />
+    <div v-else :key="user?.id || 'guest'" class="app">
       <TheSidebar @new-task="taskInput?.focus()" />
 
       <main class="main">
@@ -86,10 +101,19 @@ const emptyCopy = computed(() => search.value
             </AnimatePresence>
           </header>
 
+          <p v-if="loading" role="status" class="text-muted">正在加载你的待办…</p>
+          <div v-else-if="mode === 'error'" role="alert" class="mb-20px p-12px rounded-8px bg-accent-soft text-13px">
+            <p v-if="localOnly" class="m-0">本地数据读写失败，编辑已暂停。请确认浏览器允许保存网站数据后重试。</p>
+            <p v-else class="m-0">云端同步失败，当前显示此账号的本地缓存，编辑已暂停。重试会重新读取云端，未同步的修改可能被覆盖。</p>
+            <p v-if="!localOnly" class="text-muted">请稍后重试，或退出后重新登录。</p>
+            <button type="button" class="composer-submit" @click="loadAccount">{{ localOnly ? '重试本地存储' : '重新连接' }}</button>
+          </div>
+          <div v-else-if="mode === 'local'" class="mb-20px text-muted text-13px">访客模式：任务和项目仅保存在此浏览器。</div>
           <div v-if="filtered.length > 0" class="list-head">
             <span>{{ search ? '搜索结果' : '任务' }} · {{ filtered.length }}</span>
-            <button v-if="completedCount > 0 && !search" class="task-clear" @click="clearDone">清除已完成</button>
+            <button v-if="writable && completedCount > 0 && !search" class="task-clear" @click="clearDone">清除已完成</button>
           </div>
+          <div :inert="!writable || undefined" :aria-busy="loading">
           <TaskList ref="taskInput" :tasks="filtered">
             <template #empty>
               <div class="task-empty">
@@ -103,6 +127,7 @@ const emptyCopy = computed(() => search.value
               </div>
             </template>
           </TaskList>
+          </div>
         </motion.div>
       </main>
 

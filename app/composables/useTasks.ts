@@ -1,17 +1,17 @@
 // ============================================================
 // 数据层：任务状态、视图过滤、增删改查
 // 同步策略：配置了 Supabase → 云端为主 + localStorage 缓存；
-//          未配置 / 云端失败 → 自动降级本地模式
+//          访客 → IndexedDB；云端失败 → 当前账号缓存只读
 // ============================================================
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import type { Priority, Task } from '~/utils/parse'
 import { isProjectIcon, type ProjectIconName } from '../utils/projectIcons.ts'
+import { loadGuestWorkspace, saveGuestWorkspace } from '../utils/guestStorage.ts'
 
 export interface Project { id: string, name: string, icon: ProjectIconName }
 export type ConnMode = 'local' | 'cloud' | 'error'
 
 const STORAGE_KEY = 'aster.tasks'
-const OWNER_KEY = 'aster.owner'
 const PROJECTS_KEY = 'aster.projects'
 const LEGACY_PREFIX = 'claude-todo.' // 旧版存储 key，读取时兼容迁移
 const INBOX: Project = { id: 'inbox', name: '收件箱', icon: 'folder' }
@@ -30,27 +30,23 @@ let undoTimer: ReturnType<typeof setTimeout> | null = null
 
 let client: SupabaseClient | null = null
 let ownerId = ''
+let generation = 0
+const loading = ref(false)
+const localOnly = ref(false)
+const saving = ref(false)
+let pendingGuestWrites = 0
+const writable = computed(() => !loading.value && (mode.value === 'local' || mode.value === 'cloud'))
 
 function cloudConfigured(): boolean {
   const cfg = useRuntimeConfig()
   return !!(cfg.public.supabaseUrl && cfg.public.supabaseKey)
 }
 
-/** 无登录方案：每个浏览器生成随机 owner，配合 RLS 只能看到自己的数据 */
-function ensureOwnerId(): string {
-  let id = ''
-  try { id = localStorage.getItem(OWNER_KEY) || localStorage.getItem(LEGACY_PREFIX + 'owner') || '' } catch { /* ignore */ }
-  if (!id) {
-    id = crypto.randomUUID()
-    try { localStorage.setItem(OWNER_KEY, id) } catch { /* ignore */ }
-  }
-  return id
-}
-
 // ---------- 数据库行 ↔ Task 映射 ----------
 interface DbTask {
   id: string
   owner: string
+  user_id: string
   project_id: string
   text: string
   done: boolean
@@ -81,6 +77,7 @@ function toDb(t: Task): DbTask {
   return {
     id: t.id,
     owner: ownerId,
+    user_id: ownerId,
     project_id: t.projectId,
     text: t.text,
     done: t.done,
@@ -94,21 +91,40 @@ function toDb(t: Task): DbTask {
 }
 
 // ---------- 本地持久化 ----------
+function storageKey(key: string) {
+  return ownerId ? `${key}.user.${ownerId}` : key
+}
+
 function loadLocal() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_PREFIX + 'tasks')
+    const raw = localStorage.getItem(storageKey(STORAGE_KEY)) ?? (!ownerId ? localStorage.getItem(LEGACY_PREFIX + 'tasks') : null)
     const data = raw ? JSON.parse(raw) : []
     if (Array.isArray(data)) tasks.value = data.map(normalize)
-    const savedProjects = localStorage.getItem(PROJECTS_KEY) ?? localStorage.getItem(LEGACY_PREFIX + 'projects')
+    const savedProjects = localStorage.getItem(storageKey(PROJECTS_KEY)) ?? (!ownerId ? localStorage.getItem(LEGACY_PREFIX + 'projects') : null)
     if (savedProjects) projects.value = JSON.parse(savedProjects).map(normalizeProject)
     ensureInbox()
   } catch { /* ignore */ }
 }
 
 function saveLocal() {
+  if (localOnly.value) {
+    const requestGeneration = generation
+    pendingGuestWrites++
+    saving.value = true
+    void saveGuestWorkspace({ tasks: tasks.value, projects: projects.value }).catch(() => {
+      if (requestGeneration !== generation) return
+      mode.value = 'error'
+      syncError.value = '本地数据保存失败，请检查浏览器存储权限后重试。'
+    }).finally(() => {
+      if (requestGeneration !== generation) return
+      pendingGuestWrites--
+      saving.value = pendingGuestWrites > 0
+    })
+    return
+  }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks.value))
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects.value))
+    localStorage.setItem(storageKey(STORAGE_KEY), JSON.stringify(tasks.value))
+    localStorage.setItem(storageKey(PROJECTS_KEY), JSON.stringify(projects.value))
   } catch { /* ignore */ }
 }
 
@@ -128,51 +144,101 @@ function normalize(t: Partial<Task>): Task {
 }
 
 // ---------- 初始化（在 onMounted 中调用） ----------
-async function initTasks() {
-  loadLocal()
-  if (!cloudConfigured()) {
-    mode.value = 'local'
+function resetTasks() {
+  generation++
+  client = null
+  ownerId = ''
+  tasks.value = []
+  projects.value = [{ ...INBOX }]
+  projectId.value = INBOX.id
+  search.value = ''
+  loading.value = false
+  localOnly.value = false
+  saving.value = false
+  pendingGuestWrites = 0
+  mode.value = 'error'
+  syncError.value = null
+  if (undoTimer) clearTimeout(undoTimer)
+  undoTimer = null
+  hideToast()
+}
+
+async function initTasks(authClient: SupabaseClient | null = null, userId = '', guest = false) {
+  // Reset synchronously so account changes never show the previous user's data.
+  const previousProject = ownerId === userId ? projectId.value : INBOX.id
+  resetTasks()
+  if (!authClient || !userId) {
+    if (guest || !cloudConfigured()) {
+      localOnly.value = true
+      loading.value = true
+      const requestGeneration = generation
+      try {
+        const snapshot = await loadGuestWorkspace()
+        if (requestGeneration !== generation) return
+        if (snapshot) {
+          tasks.value = Array.isArray(snapshot.tasks) ? snapshot.tasks.map(t => normalize(t as Task)) : []
+          projects.value = Array.isArray(snapshot.projects) ? snapshot.projects.map(p => normalizeProject(p as Project)) : []
+          ensureInbox()
+        } else {
+          // Only unscoped legacy visitor data is migrated. Never read account caches.
+          loadLocal()
+          await saveGuestWorkspace({ tasks: tasks.value, projects: projects.value })
+          if (requestGeneration !== generation) return
+        }
+        mode.value = 'local'
+        if (projects.value.some(p => p.id === previousProject)) projectId.value = previousProject
+      } catch {
+        if (requestGeneration !== generation) return
+        syncError.value = '无法打开本地数据，请检查浏览器存储权限后重试。'
+      } finally {
+        if (requestGeneration === generation) loading.value = false
+      }
+    }
     return
   }
-  const cfg = useRuntimeConfig()
-  ownerId = ensureOwnerId()
-  client = createClient(cfg.public.supabaseUrl, cfg.public.supabaseKey, {
-    global: { headers: { 'x-owner-id': ownerId } },
-  })
+  client = authClient
+  ownerId = userId
+  const requestGeneration = generation
+  loadLocal()
+  loading.value = true
   try {
+    // Auth listeners can fire under the SDK lock; start queries on the next turn.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    if (requestGeneration !== generation) return
     const [taskResult, projectResult] = await Promise.all([
-      client.from('tasks').select('*').order('created_at', { ascending: false }),
-      client.from('projects').select('id, name, icon').order('created_at'),
+      authClient.from('tasks').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+      authClient.from('projects').select('id, name, icon').eq('user_id', userId).order('created_at'),
     ])
+    if (requestGeneration !== generation) return
     if (taskResult.error) throw taskResult.error
     if (projectResult.error) throw projectResult.error
-    // 云端数据覆盖本地缓存（云端为主）
     tasks.value = (taskResult.data as DbTask[]).map(fromDb)
     projects.value = (projectResult.data as Project[]).map(normalizeProject)
     ensureInbox()
+    if (projects.value.some(p => p.id === previousProject)) projectId.value = previousProject
     mode.value = 'cloud'
-    syncError.value = null
     saveLocal()
   } catch (e) {
-    // 云端失败 → 本地缓存兜底
+    if (requestGeneration !== generation) return
     mode.value = 'error'
-    syncError.value = e instanceof Error ? e.message : String(e)
-    console.warn('[aster] Supabase 连接失败，使用本地模式：', syncError.value)
+    syncError.value = e instanceof Error ? e.message : (e as { message?: string }).message || String(e)
+  } finally {
+    if (requestGeneration === generation) loading.value = false
   }
 }
 
-// ---------- 云端写操作（乐观更新，失败不阻塞 UI） ----------
-async function cloudWrite(fn: (c: SupabaseClient) => Promise<unknown>) {
-  if (!client || mode.value === 'error') return
+// Failed cloud writes retain this account's cache; subsequent edits are blocked.
+async function cloudWrite(fn: (c: SupabaseClient) => PromiseLike<unknown>) {
+  if (!client || mode.value !== 'cloud' || !ownerId) return
+  const requestGeneration = generation
   try {
     const { error } = await fn(client) as { error: { message: string } | null }
+    if (requestGeneration !== generation) return
     if (error) throw new Error(error.message)
-    if (mode.value === 'error') mode.value = 'cloud'
-    syncError.value = null
   } catch (e) {
+    if (requestGeneration !== generation) return
     mode.value = 'error'
     syncError.value = e instanceof Error ? e.message : String(e)
-    console.warn('[aster] 同步失败，已保留在本地：', syncError.value)
   }
 }
 
@@ -204,37 +270,41 @@ function setProject(id: string) {
 }
 
 function addProject(name: string, icon: ProjectIconName = 'folder'): boolean {
+  if (!writable.value) return false
   const trimmed = name.trim()
   if (!trimmed) return false
   const project = { id: crypto.randomUUID(), name: trimmed, icon }
   projects.value.push(project)
   setProject(project.id)
   saveLocal()
-  cloudWrite(c => c.from('projects').insert({ ...project, owner: ownerId }))
+  cloudWrite(c => c.from('projects').insert({ ...project, owner: ownerId, user_id: ownerId }))
   return true
 }
 
 function renameProject(id: string, name: string, icon?: ProjectIconName): boolean {
+  if (!writable.value) return false
   const project = projects.value.find(p => p.id === id)
   const trimmed = name.trim()
   if (!project || !trimmed) return false
   project.name = trimmed
   if (icon) project.icon = icon
   saveLocal()
-  cloudWrite(c => c.from('projects').upsert({ ...project, owner: ownerId }))
+  cloudWrite(c => c.from('projects').upsert({ ...project, owner: ownerId, user_id: ownerId }))
   return true
 }
 
 function moveTask(id: string, targetProjectId: string) {
+  if (!writable.value) return
   const task = tasks.value.find(t => t.id === id)
   if (!task || !projects.value.some(p => p.id === targetProjectId)) return
   task.projectId = targetProjectId
   saveLocal()
-  cloudWrite(c => c.from('tasks').update({ project_id: targetProjectId }).eq('id', id))
+  cloudWrite(c => c.from('tasks').update({ project_id: targetProjectId }).eq('user_id', ownerId).eq('id', id))
 }
 
 // ---------- 操作 ----------
 function addTask(raw: string): boolean {
+  if (!writable.value) return false
   const p = parseInput(raw)
   if (!p.text && p.tags.length === 0) return false
   const t = normalize({ ...p, projectId: projectId.value, createdAt: Date.now() })
@@ -245,44 +315,49 @@ function addTask(raw: string): boolean {
 }
 
 function toggleDone(id: string) {
+  if (!writable.value) return
   const t = tasks.value.find(t => t.id === id)
   if (!t) return
   t.done = !t.done
   t.completedAt = t.done ? Date.now() : null
   saveLocal()
-  cloudWrite(c => c.from('tasks').update({ done: t.done, completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null }).eq('id', id))
+  cloudWrite(c => c.from('tasks').update({ done: t.done, completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null }).eq('user_id', ownerId).eq('id', id))
 }
 
 function toggleStar(id: string) {
+  if (!writable.value) return
   const t = tasks.value.find(t => t.id === id)
   if (!t) return
   t.starred = !t.starred
   saveLocal()
-  cloudWrite(c => c.from('tasks').update({ starred: t.starred }).eq('id', id))
+  cloudWrite(c => c.from('tasks').update({ starred: t.starred }).eq('user_id', ownerId).eq('id', id))
 }
 
 function setDue(id: string, due: string | null) {
+  if (!writable.value) return
   const t = tasks.value.find(t => t.id === id)
   if (!t || t.due === due) return
   t.due = due
   saveLocal()
-  cloudWrite(c => c.from('tasks').update({ due }).eq('id', id))
+  cloudWrite(c => c.from('tasks').update({ due }).eq('user_id', ownerId).eq('id', id))
 }
 
 function saveEdit(id: string, text: string) {
+  if (!writable.value) return
   const t = tasks.value.find(t => t.id === id)
   if (!t) return
   t.text = text
   saveLocal()
-  cloudWrite(c => c.from('tasks').update({ text }).eq('id', id))
+  cloudWrite(c => c.from('tasks').update({ text }).eq('user_id', ownerId).eq('id', id))
 }
 
 function removeTask(id: string) {
+  if (!writable.value) return
   const index = tasks.value.findIndex(t => t.id === id)
   if (index < 0) return
   const [task] = tasks.value.splice(index, 1)
   saveLocal()
-  cloudWrite(c => c.from('tasks').delete().eq('id', id))
+  cloudWrite(c => c.from('tasks').delete().eq('user_id', ownerId).eq('id', id))
 
   // 撤销 Toast
   undoState = { task, index }
@@ -293,6 +368,7 @@ function removeTask(id: string) {
 }
 
 function undoRemove() {
+  if (!writable.value) return
   if (!undoState) return
   const { task, index } = undoState
   tasks.value.splice(Math.min(index, tasks.value.length), 0, task)
@@ -307,14 +383,16 @@ function hideToast() {
 }
 
 function clearDone() {
+  if (!writable.value) return
   const removedIds = projectTasks.value.filter(t => t.done).map(t => t.id)
   if (!removedIds.length) return
   tasks.value = tasks.value.filter(t => !removedIds.includes(t.id))
   saveLocal()
-  cloudWrite(c => c.from('tasks').delete().in('id', removedIds))
+  cloudWrite(c => c.from('tasks').delete().eq('user_id', ownerId).in('id', removedIds))
 }
 
 function reorder(dragId: string, targetId: string, before: boolean) {
+  if (!writable.value) return
   const from = tasks.value.findIndex(t => t.id === dragId)
   if (from < 0) return
   const [item] = tasks.value.splice(from, 1)
@@ -332,9 +410,9 @@ export function useTasks() {
   return {
     // 状态
     tasks, projects, projectId, currentProject, search, filtered, counts, completedCount, viewTitle,
-    toastVisible, toastText,
+    toastVisible, toastText, mode, syncError, loading, writable, localOnly, saving,
     // 动作
-    initTasks, setProject, addProject, renameProject, moveTask, addTask, toggleDone, toggleStar, saveEdit,
+    initTasks, resetTasks, setProject, addProject, renameProject, moveTask, addTask, toggleDone, toggleStar, saveEdit,
     removeTask, undoRemove, hideToast, clearDone, reorder, setDue,
   }
 }

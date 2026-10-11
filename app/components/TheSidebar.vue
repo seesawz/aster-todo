@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { AnimatePresence, motion } from 'motion-v'
 import type { ProjectIconName } from '~/utils/projectIcons'
-const { projects, projectId, counts, setProject, addProject, renameProject } = useTasks()
+const { projects, projectId, counts, setProject, addProject, renameProject, writable, saving } = useTasks()
+const { user, displayName, busy, authError, signOut, configured, showLogin } = useAuth()
 const { toggleTheme } = useTheme()
 const emit = defineEmits<{ (e: 'new-task'): void }>()
 
@@ -12,6 +13,7 @@ const projectAddButton = ref<HTMLButtonElement | null>(null)
 const sidebarEl = ref<HTMLElement | null>(null)
 
 function openProjectEditor(id: string | null = null, chooseIcon = false) {
+  if (!writable.value) return
   openIcons.value = chooseIcon
   editingProjectId.value = id
   editorVisible.value = true
@@ -58,7 +60,7 @@ function selectProject(id: string) {
       </button>
     </motion.div>
 
-    <motion.button :while-press="{ scale: 0.98 }" class="new-task-btn" title="快捷键 N" @click="emit('new-task')">
+    <motion.button :while-press="{ scale: 0.98 }" class="new-task-btn" :disabled="!writable" title="快捷键 N" @click="emit('new-task')">
       <span class="plus" aria-hidden="true">＋</span> 新任务
     </motion.button>
 
@@ -112,5 +114,29 @@ function selectProject(id: string) {
         </motion.div>
       </AnimatePresence>
     </nav>
+    <div class="mt-auto pt-16px px-8px border-t border-t-solid border-edge">
+      <div class="flex items-center gap-10px">
+        <DefaultAvatar />
+        <div class="min-w-0 flex-1">
+          <div class="text-13px font-medium truncate" :title="displayName">{{ displayName }}</div>
+          <div class="text-12px text-muted truncate" :title="user?.email">{{ user ? user.email : saving ? '正在保存…' : '仅保存在此浏览器' }}</div>
+        </div>
+        <button
+          v-if="user"
+          type="button"
+          class="ui-icon ui-focus-ring w-32px h-32px shrink-0 text-muted hover:bg-hover hover:text-ink disabled:opacity-50 disabled:cursor-wait mobile:w-36px mobile:h-36px"
+          :disabled="busy"
+          :aria-label="busy ? '正在退出…' : '退出登录'"
+          :title="busy ? '正在退出…' : '退出登录'"
+          @click="signOut"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 5H5v14h5M10 12h10m-4-4 4 4-4 4" />
+          </svg>
+        </button>
+        <button v-else-if="configured" type="button" class="project-add shrink-0" aria-label="登录账号" title="登录账号" @click="showLogin">登录</button>
+      </div>
+      <p v-if="authError" class="text-danger text-12px" role="alert">{{ authError }}</p>
+    </div>
   </aside>
 </template>

@@ -23,9 +23,15 @@
 
 ## 数据库（Supabase）
 
-- 数据表 `tasks` 和 `projects`，行级安全（RLS）：无需登录 —— 每个浏览器生成随机 `owner` 标识，通过请求头 `x-owner-id` 传递，只能读写自己的数据
-- 云端为主 + `localStorage` 缓存：未配置 Supabase 或云端不可达时自动降级本地模式
-- 初始化或升级已有数据库：Supabase 控制台 → SQL Editor → 执行 [`supabase/schema.sql`](./supabase/schema.sql)
+- GitHub OAuth 登录，Supabase 自动创建账号、维护会话。
+- 数据表 `tasks` 和 `projects` 使用 `user_id` 关联 Supabase Auth 用户；RLS 根据 JWT 中的 `auth.uid()` 校验所有读写，匿名用户无权访问。
+- 本地缓存按用户 UUID 分区；退出或换号时清空内存、搜索、撤销状态，过期请求不再更新界面。
+- 可选择“暂不登录，本地使用”：访客任务和项目写入 IndexedDB（`aster-todo` → `workspaces` → `guest`），仅保存在此浏览器；旧访客 localStorage 数据会一次性迁移。
+- 登录账号后使用独立的云端空间与按用户 UUID 分区的缓存，不自动导入访客数据；云端异常时仅显示当前账号缓存并暂停编辑。未配置 Supabase 时直接使用访客模式。
+- 访客和登录用户均显示默认头像，访客可随时返回登录入口。
+- 旧访客数据保留为 `user_id = NULL`，不会自动导入任意新账号。原 `owner` 列仅兼容旧主键，不再充当认证依据。
+- 初始化或升级已有数据库：Supabase 控制台 → SQL Editor → 执行 [`supabase/schema.sql`](./supabase/schema.sql)。脚本在事务内移除旧请求头策略，可重复执行。
+- OAuth 应用、回调与部署配置见 [登录配置指南](./docs/auth-setup.md)。
 
 ### 配置
 
@@ -43,7 +49,7 @@ NUXT_PUBLIC_SUPABASE_KEY=sb_publishable_xxx
 ```bash
 pnpm install
 pnpm dev        # 开发服务器
-pnpm test       # 项目归属、旧任务迁移、搜索与清理范围（Node.js 22.6+）
+pnpm test       # 项目功能、账号切换隔离、真实 PostgreSQL RLS（Node.js 22.6+）
 pnpm generate   # 静态生成到 .output/public
 ```
 

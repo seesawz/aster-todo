@@ -87,6 +87,7 @@ export default defineConfig({
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0s!important}}
   ` }],
   shortcuts: {
+    'auth-provider': 'flex items-center justify-center gap-12px w-full min-h-48px p-12px border border-solid border-edge rounded-10px bg-surface text-ink cursor-pointer hover:bg-hover ui-focus-ring disabled:opacity-50 disabled:cursor-wait [&_svg]:w-20px [&_svg]:h-20px',
     'ui-focus-ring': 'focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2',
     'ui-control': 'border-0 bg-transparent cursor-pointer',
     'ui-input': 'min-w-0 border-0 outline-none bg-transparent text-ink',

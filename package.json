@@ -9,7 +9,8 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
@@ -20,7 +21,10 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.64.0",
     "@unocss/nuxt": "^66.10.5",
+    "fake-indexeddb": "^6.2.5",
     "unocss": "^66.10.5"
   }
 }

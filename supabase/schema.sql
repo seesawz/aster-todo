@@ -3,9 +3,11 @@
 -- 用法：Supabase 控制台 → SQL Editor → 粘贴执行本文件
 -- ============================================================
 
+begin;
+
 create table if not exists public.tasks (
   id           uuid primary key,                -- 客户端生成的 uuid
-  owner        text not null,                   -- 访客标识（无登录方案），由请求头 x-owner-id 传入
+  owner        text not null,                   -- 兼容旧主键；新数据与 user_id 相同
   project_id   text not null default 'inbox',
   text         text not null default '',
   done         boolean not null default false,
@@ -32,22 +34,33 @@ create table if not exists public.projects (
 alter table public.projects add column if not exists icon text not null default 'folder';
 
 alter table public.projects enable row level security;
-drop policy if exists "projects scoped to owner header" on public.projects;
-create policy "projects scoped to owner header"
-  on public.projects
-  for all
-  using (owner = current_setting('request.headers', true)::json ->> 'x-owner-id')
-  with check (owner = current_setting('request.headers', true)::json ->> 'x-owner-id');
-
--- 开启行级安全：每个访客只能读写自己的行（owner 与请求头 x-owner-id 匹配）
 alter table public.tasks enable row level security;
 
-drop policy if exists "tasks scoped to owner header" on public.tasks;
-create policy "tasks scoped to owner header"
-  on public.tasks
-  for all
-  using (owner = current_setting('request.headers', true)::json ->> 'x-owner-id')
-  with check (owner = current_setting('request.headers', true)::json ->> 'x-owner-id');
+-- Account isolation upgrade (also safe to run against an existing guest database).
+-- Legacy rows keep user_id = NULL; never claim guest data based on a browser header.
+-- owner is retained for the legacy projects primary key and backward compatibility.
 
--- 建议索引
-create index if not exists tasks_owner_idx on public.tasks (owner);
+alter table public.tasks add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.projects add column if not exists user_id uuid references auth.users(id) on delete cascade;
+
+-- Remove insecure guest policies before granting authenticated access.
+drop policy if exists "tasks scoped to owner header" on public.tasks;
+drop policy if exists "projects scoped to owner header" on public.projects;
+drop policy if exists "tasks scoped to authenticated user" on public.tasks;
+drop policy if exists "projects scoped to authenticated user" on public.projects;
+
+create policy "tasks scoped to authenticated user" on public.tasks
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()) and owner = (select auth.uid())::text);
+create policy "projects scoped to authenticated user" on public.projects
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()) and owner = (select auth.uid())::text);
+
+revoke all on public.tasks, public.projects from anon;
+grant select, insert, update, delete on public.tasks, public.projects to authenticated;
+create index if not exists tasks_user_id_idx on public.tasks(user_id);
+create index if not exists projects_user_id_idx on public.projects(user_id);
+
+commit;
