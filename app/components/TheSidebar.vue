@@ -4,7 +4,6 @@ import type { ProjectIconName } from '~/utils/projectIcons'
 const { projects, projectId, counts, setProject, addProject, renameProject, writable, saving } = useTasks()
 const { user, displayName, busy, authError, signOut, configured, showLogin } = useAuth()
 const { toggleTheme } = useTheme()
-const emit = defineEmits<{ (e: 'new-task'): void }>()
 
 const editorVisible = ref(false)
 const openIcons = ref(false)
@@ -43,7 +42,7 @@ function selectProject(id: string) {
 
 <template>
   <aside ref="sidebarEl" class="sidebar">
-    <motion.div class="brand" :initial="{ opacity: 0, x: -6 }" :animate="{ opacity: 1, x: 0 }">
+    <motion.div class="brand" :initial="{ opacity: 0, x: -4 }" :animate="{ opacity: 1, x: 0 }">
       <span class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <path d="M12 2.5v5.5M12 16v5.5M2.5 12H8M16 12h5.5M5.3 5.3l3.9 3.9M14.8 14.8l3.9 3.9M18.7 5.3l-3.9 3.9M9.2 14.8l-3.9 3.9" />
@@ -59,10 +58,6 @@ function selectProject(id: string) {
         </svg>
       </button>
     </motion.div>
-
-    <motion.button :while-press="{ scale: 0.98 }" class="new-task-btn" :disabled="!writable" title="快捷键 N" @click="emit('new-task')">
-      <span class="plus" aria-hidden="true">＋</span> 新任务
-    </motion.button>
 
     <div class="projects-heading">
       <span>项目</span>
@@ -116,7 +111,7 @@ function selectProject(id: string) {
     </nav>
     <div class="mt-auto pt-16px px-8px border-t border-t-solid border-edge">
       <div class="flex items-center gap-10px">
-        <DefaultAvatar />
+        <DefaultAvatar :seed="user?.email || displayName" />
         <div class="min-w-0 flex-1">
           <div class="text-13px font-medium truncate" :title="displayName">{{ displayName }}</div>
           <div class="text-12px text-muted truncate" :title="user?.email">{{ user ? user.email : saving ? '正在保存…' : '仅保存在此浏览器' }}</div>

@@ -70,20 +70,21 @@ const emptyCopy = computed(() => search.value
 </script>
 
 <template>
-  <MotionConfig reduced-motion="user" :skip-animations="reducedMotion" :transition="{ duration: 0.2, ease: 'easeOut' }">
+  <!-- 动效基调：进场 swift-out（快出缓停）更"贵"；布局位移用近临界弹簧（快速归位、几乎无回弹） -->
+  <MotionConfig reduced-motion="user" :skip-animations="reducedMotion" :transition="{ duration: 0.2, ease: [0.22, 1, 0.36, 1], layout: { type: 'spring', stiffness: 400, damping: 35 } }">
     <div v-if="!ready" class="startup-screen" role="status" aria-label="正在恢复登录状态"><span class="startup-logo" aria-hidden="true">✳</span></div>
     <AuthPanel v-else-if="configured && !user && !isGuestMode" />
     <div v-else :key="user?.id || 'guest'" class="app">
-      <TheSidebar @new-task="taskInput?.focus()" />
+      <TheSidebar />
 
       <main class="main">
-        <motion.div class="main-inner" :initial="{ opacity: 0, y: 8 }" :animate="{ opacity: 1, y: 0 }">
+        <motion.div class="main-inner" :initial="{ opacity: 0, y: 4 }" :animate="{ opacity: 1, y: 0 }">
           <header class="header">
             <div class="header-text">
               <motion.h1 class="page-title" :key="projectId" :initial="{ opacity: 0, y: 4 }" :animate="{ opacity: 1, y: 0 }">{{ viewTitle }}</motion.h1>
             </div>
             <AnimatePresence>
-              <motion.div v-if="searchVisible" key="search" class="search-box" :initial="{ opacity: 0, y: -4 }" :animate="{ opacity: 1, y: 0 }" :exit="{ opacity: 0, y: -4 }">
+              <motion.div v-if="searchVisible" key="search" class="search-box" :initial="{ opacity: 0, y: -3 }" :animate="{ opacity: 1, y: 0 }" :exit="{ opacity: 0, y: -3, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                   <circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.4-4.4" />
                 </svg>
@@ -117,7 +118,7 @@ const emptyCopy = computed(() => search.value
           <TaskList ref="taskInput" :tasks="filtered">
             <template #empty>
               <div class="task-empty">
-                <motion.span class="task-empty-logo" :initial="{ scale: 0.9, rotate: -12 }" :animate="{ scale: 1, rotate: 0 }" aria-hidden="true">
+                <motion.span class="task-empty-logo" :initial="{ scale: 0.92 }" :animate="{ scale: 1 }" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <path d="M12 2.5v5.5M12 16v5.5M2.5 12H8M16 12h5.5M5.3 5.3l3.9 3.9M14.8 14.8l3.9 3.9M18.7 5.3l-3.9 3.9M9.2 14.8l-3.9 3.9" />
                   </svg>
@@ -133,7 +134,7 @@ const emptyCopy = computed(() => search.value
 
       <!-- 撤销 Toast -->
       <AnimatePresence>
-        <motion.div v-if="toastVisible" key="toast" class="toast" :initial="{ opacity: 0, y: 12 }" :animate="{ opacity: 1, y: 0 }" :exit="{ opacity: 0, y: 8 }">
+        <motion.div v-if="toastVisible" key="toast" class="toast" :initial="{ opacity: 0, y: 8 }" :animate="{ opacity: 1, y: 0, transition: { type: 'spring', stiffness: 420, damping: 32 } }" :exit="{ opacity: 0, y: 6, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
           <span class="truncate">{{ toastText }}</span>
           <button class="toast-undo" type="button" @click="undoRemove">撤销</button>
         </motion.div>

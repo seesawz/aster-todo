@@ -48,7 +48,7 @@ function onEscape() {
       </button>
     </div>
     <AnimatePresence>
-      <motion.div v-if="iconsVisible" key="icons" class="project-icon-picker" role="group" aria-label="项目图标选项" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0 }">
+      <motion.div v-if="iconsVisible" key="icons" class="project-icon-picker" role="group" aria-label="项目图标选项" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
         <button v-for="option in PROJECT_ICONS" :key="option.id" type="button" class="project-icon-option" :class="{ 'bg-accent-soft text-accent-strong': icon === option.id }" :aria-label="option.label" :aria-pressed="icon === option.id" :title="option.label" @click="chooseIcon(option.id)">
           <ProjectIcon :name="option.id" />
         </button>

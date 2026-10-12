@@ -60,7 +60,7 @@ function onDragEnd() {
     @drop="onDrop"
   >
     <AnimatePresence :initial="false">
-      <motion.li v-if="props.tasks.length === 0" key="empty" class="task-list-empty" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0 }" :style="{ overflow: 'hidden' }">
+      <motion.li v-if="props.tasks.length === 0" key="empty" class="task-list-empty" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }" :style="{ overflow: 'hidden' }">
         <slot name="empty" />
       </motion.li>
       <TaskItem

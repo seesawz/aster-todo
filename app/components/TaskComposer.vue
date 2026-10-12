@@ -18,10 +18,11 @@ const hintParts = computed(() => {
   return parts
 })
 
-function submit() {
+// refocus：Enter 提交后保持输入框聚焦以便连续添加；失焦提交时不抢回焦点
+function submit(refocus = true) {
   if (!addTask(input.value)) return
   input.value = ''
-  inputEl.value?.focus()
+  if (refocus) inputEl.value?.focus()
 }
 
 function focus() {
@@ -32,11 +33,8 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <form class="composer group/composer" @submit.prevent="submit">
+  <form class="composer group/composer" @submit.prevent="submit(true)">
     <div class="composer-row">
-      <svg class="composer-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
       <input
         class="composer-input"
         ref="inputEl"
@@ -46,14 +44,12 @@ defineExpose({ focus })
         :aria-label="`添加任务到${currentProject.name}`"
         autocomplete="off"
         maxlength="300"
+        @blur="submit(false)"
       >
-      <motion.button :while-press="{ scale: 0.95 }" v-if="canSubmit" type="submit" class="composer-submit" title="添加任务（Enter）">
-        添加
-      </motion.button>
-      <kbd v-else class="composer-key" aria-hidden="true">Enter</kbd>
+      <kbd v-if="!canSubmit" class="composer-key" aria-hidden="true">Enter</kbd>
     </div>
     <AnimatePresence>
-      <motion.div v-if="hintParts.length" key="hints" class="composer-hint" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0 }" :style="{ overflow: 'hidden' }">
+      <motion.div v-if="hintParts.length" key="hints" class="composer-hint" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }" :style="{ overflow: 'hidden' }">
         <span class="hint-label">识别到</span>
         <span v-for="part in hintParts" :key="part" class="hint-chip">{{ part }}</span>
       </motion.div>

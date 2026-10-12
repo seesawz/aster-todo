@@ -58,9 +58,9 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
 <template>
   <motion.li
     layout="position"
-    :initial="{ opacity: 0, y: 6 }"
+    :initial="{ opacity: 0, y: 3 }"
     :animate="{ opacity: dragging ? 0.35 : 1, y: 0 }"
-    :exit="{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, borderBottomWidth: 0, pointerEvents: 'none' }"
+    :exit="{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, borderBottomWidth: 0, pointerEvents: 'none', transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }"
     :style="{ overflow: 'hidden' }"
     class="task group/task"
     :data-id="task.id"
@@ -69,14 +69,17 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
     <span v-if="dropMark !== null" class="drop-indicator" :class="dropMark ? 'top-[-1px]' : 'bottom-[-1px]'" />
     <span class="task-check">
       <motion.input
-        :while-press="{ scale: 0.9 }"
+        :while-press="{ scale: 0.94 }"
         type="checkbox"
         class="check"
         :checked="task.done"
         :aria-label="task.done ? '标记为未完成' : '标记为已完成'"
         @change="toggleDone(task.id)"
       />
-      <svg v-if="task.done" class="check-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11" /></svg>
+      <!-- Things 风格打勾：整体轻弹入 + 勾线描绘，完成感更强又不喧宾夺主 -->
+      <motion.svg v-if="task.done" class="check-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" :initial="{ scale: 0.8, opacity: 0 }" :animate="{ scale: 1, opacity: 1 }" :transition="{ type: 'spring', stiffness: 500, damping: 30 }">
+        <motion.path d="m4.5 12.5 5 5 10-11" :initial="{ pathLength: 0 }" :animate="{ pathLength: 1 }" :transition="{ duration: 0.18, ease: 'easeOut', delay: 0.05 }" />
+      </motion.svg>
     </span>
 
     <div class="task-content">
