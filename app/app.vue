@@ -102,18 +102,31 @@ const emptyCopy = computed(() => search.value
             </AnimatePresence>
           </header>
 
-          <p v-if="loading" role="status" class="text-muted">正在加载你的待办…</p>
-          <div v-else-if="mode === 'error'" role="alert" class="mb-20px p-12px rounded-8px bg-accent-soft text-13px">
-            <p v-if="localOnly" class="m-0">本地数据读写失败，编辑已暂停。请确认浏览器允许保存网站数据后重试。</p>
-            <p v-else class="m-0">云端同步失败，当前显示此账号的本地缓存，编辑已暂停。重试会重新读取云端，未同步的修改可能被覆盖。</p>
-            <p v-if="!localOnly" class="text-muted">请稍后重试，或退出后重新登录。</p>
-            <button type="button" class="composer-submit" @click="loadAccount">{{ localOnly ? '重试本地存储' : '重新连接' }}</button>
-          </div>
-          <div v-else-if="mode === 'local'" class="mb-20px text-muted text-13px">访客模式：任务和项目仅保存在此浏览器。</div>
-          <div v-if="filtered.length > 0" class="list-head">
-            <span>{{ search ? '搜索结果' : '任务' }} · {{ filtered.length }}</span>
-            <button v-if="writable && completedCount > 0 && !search" class="task-clear" @click="clearDone">清除已完成</button>
-          </div>
+          <!-- 状态横幅与计数条随高度展开/收起，出现或消失时不挤压下方内容；间距留在内层以参与高度动画 -->
+          <AnimatePresence :initial="false">
+            <motion.div v-if="loading" key="loading" role="status" :style="{ overflow: 'hidden' }" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
+              <p class="text-muted m-0 mb-20px">正在加载你的待办…</p>
+            </motion.div>
+            <motion.div v-else-if="mode === 'error'" key="error" role="alert" :style="{ overflow: 'hidden' }" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
+              <div class="mb-20px p-12px rounded-8px bg-accent-soft text-13px">
+                <p v-if="localOnly" class="m-0">本地数据读写失败，编辑已暂停。请确认浏览器允许保存网站数据后重试。</p>
+                <p v-else class="m-0">云端同步失败，当前显示此账号的本地缓存，编辑已暂停。重试会重新读取云端，未同步的修改可能被覆盖。</p>
+                <p v-if="!localOnly" class="text-muted">请稍后重试，或退出后重新登录。</p>
+                <button type="button" class="composer-submit" @click="loadAccount">{{ localOnly ? '重试本地存储' : '重新连接' }}</button>
+              </div>
+            </motion.div>
+            <motion.div v-else-if="mode === 'local'" key="local" :style="{ overflow: 'hidden' }" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
+              <div class="mb-20px text-muted text-13px">访客模式：任务和项目仅保存在此浏览器。</div>
+            </motion.div>
+          </AnimatePresence>
+          <AnimatePresence :initial="false">
+            <motion.div v-if="filtered.length > 0" key="list-head" :style="{ overflow: 'hidden' }" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }">
+              <div class="list-head">
+                <span>{{ search ? '搜索结果' : '任务' }} · {{ filtered.length }}</span>
+                <button v-if="writable && completedCount > 0 && !search" class="task-clear" @click="clearDone">清除已完成</button>
+              </div>
+            </motion.div>
+          </AnimatePresence>
           <div :inert="!writable || undefined" :aria-busy="loading">
           <TaskList ref="taskInput" :tasks="filtered">
             <template #empty>

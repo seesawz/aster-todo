@@ -109,10 +109,22 @@ const recordStamp = computed(() => fmtStamp(props.task.done ? props.task.complet
         <time class="task-stamp" :title="`${task.done ? '完成于' : '创建于'} ${recordStamp}`">{{ recordStamp.slice(5, 10) }}</time>
 
       </div>
-      <div v-if="task.tags.length || task.due" class="task-meta">
-        <span v-for="tag in task.tags" :key="tag" class="tag-chip">#{{ tag }}</span>
-        <span v-if="task.due" class="due-chip" title="到期时间">{{ fmtDue(task.due) }}</span>
-      </div>
+      <!-- meta 行随高度展开/收起，避免设置到期时间等内容增减时下方任务跳动；间距放内层以参与高度动画 -->
+      <AnimatePresence :initial="false">
+        <motion.div
+          v-if="task.tags.length || task.due"
+          key="meta"
+          :style="{ overflow: 'hidden' }"
+          :initial="{ opacity: 0, height: 0 }"
+          :animate="{ opacity: 1, height: 'auto' }"
+          :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }"
+        >
+          <div class="task-meta">
+            <span v-for="tag in task.tags" :key="tag" class="tag-chip">#{{ tag }}</span>
+            <span v-if="task.due" class="due-chip" title="到期时间">{{ fmtDue(task.due) }}</span>
+          </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
 
     <div class="task-side">

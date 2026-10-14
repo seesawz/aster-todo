@@ -46,7 +46,8 @@ defineExpose({ focus })
         maxlength="300"
         @blur="submit(false)"
       >
-      <kbd v-if="!canSubmit" class="composer-key" aria-hidden="true">Enter</kbd>
+      <!-- 常驻占位 + 透明度过渡：避免键提示挂载/卸载时输入框宽度突变 -->
+      <kbd class="composer-key" :class="{ 'opacity-0': canSubmit }" aria-hidden="true">Enter</kbd>
     </div>
     <AnimatePresence>
       <motion.div v-if="hintParts.length" key="hints" class="composer-hint" :initial="{ opacity: 0, height: 0 }" :animate="{ opacity: 1, height: 'auto' }" :exit="{ opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }" :style="{ overflow: 'hidden' }">

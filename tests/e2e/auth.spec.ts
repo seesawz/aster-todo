@@ -150,6 +150,7 @@ test('访客无需登录：项目和任务写入 IndexedDB，刷新保留，提�
   expect(await page.evaluate(() => localStorage.getItem('aster.tasks'))).toBeNull()
   await page.reload()
   await expect(page.getByText('访客', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '本地工作' })).toBeVisible()
   await page.getByRole('button', { name: /^本地工作 \d+$/ }).click()
   await expect(page.getByText('访客任务', { exact: true })).toBeVisible()
   expect(cloudRequests).toEqual([])

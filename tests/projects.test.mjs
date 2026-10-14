@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import { loadGuestWorkspace } from '../app/utils/guestStorage.ts'
+import { loadGuestWorkspace, saveGuestWorkspace } from '../app/utils/guestStorage.ts'
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ref, computed } from 'vue'
@@ -22,6 +22,7 @@ beforeEach(async () => {
   await loadGuestWorkspace()
   globalThis.indexedDB = new IDBFactory()
   storage.clear()
+  state.localOnly.value = false // 重置访客标记，让持久化走 localStorage 路径
   state.tasks.value = []
   state.projects.value = [{ id: 'inbox', name: '收件箱', icon: 'folder' }]
   state.setProject('inbox')
@@ -66,6 +67,26 @@ test('重命名、移动任务与项目归属在刷新后保留', async () => {
   assert.equal(state.currentProject.value.name, '项目二')
   assert.equal(state.filtered.value[0].id, taskId)
   assert.equal(state.counts.value.inbox, 0)
+})
+
+test('刷新后恢复上次所在的项目，项目已删除时退回收件箱', async () => {
+  state.addProject('工作')
+  const workId = state.projectId.value
+  state.addTask('工作任务')
+  // 模拟刷新：内存状态归零后重新初始化
+  state.tasks.value = []
+  state.projects.value = [{ id: 'inbox', name: '收件箱', icon: 'folder' }]
+  state.projectId.value = 'inbox'
+  await state.initTasks()
+  assert.equal(state.projectId.value, workId)
+  assert.equal(state.currentProject.value.name, '工作')
+  // 上次项目已不存在（如在其他设备被删除）时不再恢复
+  await saveGuestWorkspace({ tasks: [], projects: [{ id: 'inbox', name: '收件箱', icon: 'folder' }], lastProjectId: workId })
+  state.tasks.value = []
+  state.projects.value = [{ id: 'inbox', name: '收件箱', icon: 'folder' }]
+  state.projectId.value = 'inbox'
+  await state.initTasks()
+  assert.equal(state.projectId.value, 'inbox')
 })
 
 test('搜索限定当前项目，清除已完成不会删除其他项目任务', () => {

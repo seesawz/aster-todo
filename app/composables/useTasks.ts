@@ -13,6 +13,7 @@ export type ConnMode = 'local' | 'cloud' | 'error'
 
 const STORAGE_KEY = 'aster.tasks'
 const PROJECTS_KEY = 'aster.projects'
+const LAST_PROJECT_KEY = 'aster.lastProject' // 记住上次所在项目，刷新后恢复
 const LEGACY_PREFIX = 'claude-todo.' // 旧版存储 key，读取时兼容迁移
 const INBOX: Project = { id: 'inbox', name: '收件箱', icon: 'folder' }
 
@@ -103,6 +104,8 @@ function loadLocal() {
     const savedProjects = localStorage.getItem(storageKey(PROJECTS_KEY)) ?? (!ownerId ? localStorage.getItem(LEGACY_PREFIX + 'projects') : null)
     if (savedProjects) projects.value = JSON.parse(savedProjects).map(normalizeProject)
     ensureInbox()
+    const savedProjectId = localStorage.getItem(storageKey(LAST_PROJECT_KEY))
+    if (savedProjectId && projects.value.some(p => p.id === savedProjectId)) projectId.value = savedProjectId
   } catch { /* ignore */ }
 }
 
@@ -111,7 +114,7 @@ function saveLocal() {
     const requestGeneration = generation
     pendingGuestWrites++
     saving.value = true
-    void saveGuestWorkspace({ tasks: tasks.value, projects: projects.value }).catch(() => {
+    void saveGuestWorkspace({ tasks: tasks.value, projects: projects.value, lastProjectId: projectId.value }).catch(() => {
       if (requestGeneration !== generation) return
       mode.value = 'error'
       syncError.value = '本地数据保存失败，请检查浏览器存储权限后重试。'
@@ -125,6 +128,7 @@ function saveLocal() {
   try {
     localStorage.setItem(storageKey(STORAGE_KEY), JSON.stringify(tasks.value))
     localStorage.setItem(storageKey(PROJECTS_KEY), JSON.stringify(projects.value))
+    localStorage.setItem(storageKey(LAST_PROJECT_KEY), projectId.value)
   } catch { /* ignore */ }
 }
 
@@ -182,11 +186,12 @@ async function initTasks(authClient: SupabaseClient | null = null, userId = '', 
         } else {
           // Only unscoped legacy visitor data is migrated. Never read account caches.
           loadLocal()
-          await saveGuestWorkspace({ tasks: tasks.value, projects: projects.value })
+          await saveGuestWorkspace({ tasks: tasks.value, projects: projects.value, lastProjectId: projectId.value })
           if (requestGeneration !== generation) return
         }
         mode.value = 'local'
-        if (projects.value.some(p => p.id === previousProject)) projectId.value = previousProject
+        const restoredProjectId = typeof snapshot.lastProjectId === 'string' ? snapshot.lastProjectId : previousProject
+        if (projects.value.some(p => p.id === restoredProjectId)) projectId.value = restoredProjectId
       } catch {
         if (requestGeneration !== generation) return
         syncError.value = '无法打开本地数据，请检查浏览器存储权限后重试。'
@@ -199,6 +204,7 @@ async function initTasks(authClient: SupabaseClient | null = null, userId = '', 
   client = authClient
   ownerId = userId
   const requestGeneration = generation
+  projectId.value = previousProject // 缓存读取前先回到原位置，缓存里的记录会在 loadLocal 中覆盖
   loadLocal()
   loading.value = true
   try {
@@ -215,7 +221,8 @@ async function initTasks(authClient: SupabaseClient | null = null, userId = '', 
     tasks.value = (taskResult.data as DbTask[]).map(fromDb)
     projects.value = (projectResult.data as Project[]).map(normalizeProject)
     ensureInbox()
-    if (projects.value.some(p => p.id === previousProject)) projectId.value = previousProject
+    // 云端数据可能来自其他设备：当前项目已被删除时才退回收件箱
+    if (!projects.value.some(p => p.id === projectId.value)) projectId.value = INBOX.id
     mode.value = 'cloud'
     saveLocal()
   } catch (e) {
@@ -267,6 +274,7 @@ const viewTitle = computed(() => currentProject.value.name)
 function setProject(id: string) {
   projectId.value = id
   search.value = ''
+  saveLocal() // 立即记住项目位置，切换后马上刷新也能恢复
 }
 
 function addProject(name: string, icon: ProjectIconName = 'folder'): boolean {

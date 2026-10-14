@@ -1,5 +1,5 @@
 /** One atomic snapshot for the visitor workspace; account caches stay separate. */
-export interface GuestWorkspace { tasks: unknown[], projects: unknown[] }
+export interface GuestWorkspace { tasks: unknown[], projects: unknown[], lastProjectId?: string }
 const DATABASE = 'aster-todo'
 const STORE = 'workspaces'
 const GUEST = 'guest'
